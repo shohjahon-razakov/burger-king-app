@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🍔 Burger King Mini App</title>
+
+    <!-- Подключаем Telegram Web App SDK -->
+    <script src="https://telegram.org/js/telegram-web-app.js?59"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        body {
+            background: var(--tg-theme-bg-color, #ffffff);
+            color: var(--tg-theme-text-color, #000000);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: var(--tg-theme-button-color, #ff6b00);
+            border-radius: 20px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .product {
+            background: var(--tg-theme-secondary-bg-color, #f5f5f5);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+
+        .product-img {
+            width: 80px;
+            height: 80px;
+            background: #ff6b00;
+            border-radius: 10px;
+            margin-right: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30px;
+        }
+
+        .product-info {
+            flex: 1;
+        }
+
+        .product-title {
+            font-weight: bold;
+            font-size: 18px;
+            margin-bottom: 5px;
+        }
+
+        .product-price {
+            color: var(--tg-theme-accent-text-color, #ff6b00);
+            font-weight: bold;
+            font-size: 20px;
+        }
+
+        .add-to-cart {
+            background: var(--tg-theme-button-color, #ff6b00);
+            color: var(--tg-theme-button-text-color, #ffffff);
+            border: none;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .cart {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            background: var(--tg-theme-button-color, #ff6b00);
+            color: white;
+            padding: 15px;
+            border-radius: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .cart-total {
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        .checkout-btn {
+            background: white;
+            color: #ff6b00;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🍔 BURGER KING</h1>
+            <p>Закажи вкуснейшие бургеры!</p>
+        </div>
+
+        <div id="menu">
+            <!-- Продукты будут здесь -->
+        </div>
+
+        <div class="cart" id="cart" style="display: none;">
+            <div class="cart-total">Итого: <span id="total">0</span> ₽</div>
+            <button class="checkout-btn" onclick="checkout()">💳 Заказать</button>
+        </div>
+    </div>
+
+    <script>
+        // Инициализация Telegram Web App
+        const tg = window.Telegram.WebApp;
+
+        // Показываем приложение
+        tg.ready();
+        tg.expand(); // Разворачиваем на весь экран
+
+        // Меню продуктов
+        const menu = [
+            { id: 1, name: "🍔 Воппер", price: 199, emoji: "🍔" },
+            { id: 2, name: "🧀 Чизбургер", price: 99, emoji: "🧀" },
+            { id: 3, name: "🥤 Кока-Кола", price: 89, emoji: "🥤" },
+            { id: 4, name: "🍟 Картофель фри", price: 129, emoji: "🍟" },
+            { id: 5, name: "🍦 Мороженое", price: 79, emoji: "🍦" },
+            { id: 6, name: "☕ Кофе", price: 119, emoji: "☕" }
+        ];
+
+        // Корзина
+        let cart = [];
+        let total = 0;
+
+        // Загружаем меню
+        function loadMenu() {
+            const menuElement = document.getElementById('menu');
+            menuElement.innerHTML = '';
+
+            menu.forEach(item => {
+                const product = document.createElement('div');
+                product.className = 'product';
+                product.innerHTML = `
+                    <div class="product-img">${item.emoji}</div>
+                    <div class="product-info">
+                        <div class="product-title">${item.name}</div>
+                        <div class="product-price">${item.price} ₽</div>
+                    </div>
+                    <button class="add-to-cart" onclick="addToCart(${item.id})">+ Добавить</button>
+                `;
+                menuElement.appendChild(product);
+            });
+        }
+
+        // Добавить в корзину
+        function addToCart(productId) {
+            const product = menu.find(p => p.id === productId);
+            cart.push(product);
+            total += product.price;
+
+            // Обновляем отображение корзины
+            updateCart();
+
+            // Вибрация (если поддерживается)
+            if (tg.HapticFeedback) {
+                tg.HapticFeedback.impactOccurred('light');
+            }
+        }
+
+        // Обновить корзину
+        function updateCart() {
+            document.getElementById('total').textContent = total;
+            const cartElement = document.getElementById('cart');
+
+            if (cart.length > 0) {
+                cartElement.style.display = 'flex';
+            } else {
+                cartElement.style.display = 'none';
+            }
+        }
+
+        // Оформить заказ
+        function checkout() {
+            // Создаем данные для отправки
+            const orderData = {
+                user: tg.initDataUnsafe?.user,
+                cart: cart,
+                total: total,
+                timestamp: new Date().toISOString()
+            };
+
+            // Показываем подтверждение
+            tg.showConfirm(
+                `Подтвердить заказ на ${total} ₽?`,
+                function(confirmed) {
+                    if (confirmed) {
+                        // Отправляем данные боту
+                        tg.sendData(JSON.stringify(orderData));
+
+                        // Показываем уведомление
+                        tg.showAlert("✅ Заказ отправлен! Ожидайте подтверждения.");
+
+                        // Очищаем корзину
+                        cart = [];
+                        total = 0;
+                        updateCart();
+
+                        // Закрываем Mini App через 2 секунды
+                        setTimeout(() => {
+                            tg.close();
+                        }, 2000);
+                    }
+                }
+            );
+        }
+
+        // Показать информацию о пользователе
+        function showUserInfo() {
+            const user = tg.initDataUnsafe?.user;
+            if (user) {
+                console.log("Пользователь:", user);
+
+                // Можно показать приветствие с именем
+                if (user.first_name) {
+                    document.querySelector('.header p').textContent =
+                        `Привет, ${user.first_name}! Закажи вкуснейшие бургеры!`;
+                }
+            }
+        }
+
+        // Запуск при загрузке
+        document.addEventListener('DOMContentLoaded', () => {
+            loadMenu();
+            showUserInfo();
+            updateCart();
+
+            // Настраиваем кнопку "Назад"
+            tg.BackButton.show();
+            tg.BackButton.onClick(() => {
+                if (cart.length > 0) {
+                    tg.showConfirm("У вас есть товары в корзине. Выйти?", function(ok) {
+                        if (ok) {
+                            tg.close();
+                        }
+                    });
+                } else {
+                    tg.close();
+                }
+            });
+        });
+
+        // Обработчик изменения темы
+        tg.onEvent('themeChanged', () => {
+            console.log("Тема изменена на:", tg.colorScheme);
+        });
+    </script>
+</body>
+</html>
