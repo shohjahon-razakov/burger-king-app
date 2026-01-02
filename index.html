@@ -87,6 +87,11 @@
             border-radius: 10px;
             font-weight: bold;
             cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .add-to-cart:active {
+            transform: scale(0.95);
         }
 
         .cart {
@@ -101,6 +106,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            box-shadow: 0 -5px 20px rgba(0,0,0,0.1);
         }
 
         .cart-total {
@@ -116,14 +122,38 @@
             border-radius: 10px;
             font-weight: bold;
             cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .checkout-btn:hover {
+            background: #ff6b00;
+            color: white;
+            border: 1px solid white;
+        }
+
+        /* Стиль для тестового режима */
+        .test-mode {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: #ff6b00;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: bold;
+            z-index: 1000;
         }
     </style>
 </head>
 <body>
+    <!-- Баннер тестового режима -->
+    <div class="test-mode">🔧 ТЕСТОВЫЙ РЕЖИМ</div>
+
     <div class="container">
         <div class="header">
             <h1>🍔 BURGER KING</h1>
-            <p>Закажи вкуснейшие бургеры!</p>
+            <p id="greeting">Закажи вкуснейшие бургеры!</p>
         </div>
 
         <div id="menu">
@@ -131,7 +161,9 @@
         </div>
 
         <div class="cart" id="cart" style="display: none;">
-            <div class="cart-total">Итого: <span id="total">0</span> ₽</div>
+            <div class="cart-total">
+                🛒 <span id="cart-count">0</span> товара на <span id="total">0</span> ₽
+            </div>
             <button class="checkout-btn" onclick="checkout()">💳 Заказать</button>
         </div>
     </div>
@@ -143,6 +175,7 @@
         // Показываем приложение
         tg.ready();
         tg.expand(); // Разворачиваем на весь экран
+        tg.enableClosingConfirmation(); // Подтверждение выхода
 
         // Меню продуктов
         const menu = [
@@ -181,21 +214,31 @@
         // Добавить в корзину
         function addToCart(productId) {
             const product = menu.find(p => p.id === productId);
+            if (!product) return;
+            
             cart.push(product);
             total += product.price;
 
             // Обновляем отображение корзины
             updateCart();
 
-            // Вибрация (если поддерживается)
+            // Вибрация
             if (tg.HapticFeedback) {
                 tg.HapticFeedback.impactOccurred('light');
             }
+
+            // Всплывающее уведомление
+            tg.showPopup({
+                title: "✅ Добавлено в корзину",
+                message: `${product.emoji} ${product.name}\n${product.price} ₽`,
+                buttons: [{ type: "close" }]
+            });
         }
 
         // Обновить корзину
         function updateCart() {
             document.getElementById('total').textContent = total;
+            document.getElementById('cart-count').textContent = cart.length;
             const cartElement = document.getElementById('cart');
 
             if (cart.length > 0) {
@@ -205,52 +248,113 @@
             }
         }
 
-        // Оформить заказ
+        // Оформить заказ (ОПЛАТА)
         function checkout() {
-            // Создаем данные для отправки
-            const orderData = {
-                user: tg.initDataUnsafe?.user,
-                cart: cart,
-                total: total,
-                timestamp: new Date().toISOString()
+            if (cart.length === 0) {
+                tg.showAlert("🛒 Корзина пуста! Добавьте товары.");
+                return;
+            }
+
+            // Создаем уникальный ID заказа
+            const orderId = "ORDER_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9);
+            
+            // Формируем описание заказа
+            const itemsList = cart.map(item => item.name).join(', ');
+            
+            // СОЗДАЕМ ИНВОЙС ДЛЯ ОПЛАТЫ
+            const invoice = {
+                title: "🍔 Заказ Burger King",
+                description: `Товары: ${itemsList}`,
+                payload: JSON.stringify({
+                    order_id: orderId,
+                    user_id: tg.initDataUnsafe?.user?.id,
+                    username: tg.initDataUnsafe?.user?.username,
+                    cart: cart,
+                    total: total
+                }),
+                // ВАШ TEST PROVIDER TOKEN
+                provider_token: "1744374395:TEST:a4fe3020d757760b7abe",
+                currency: "RUB",
+                prices: [
+                    {
+                        label: "Общая сумма заказа",
+                        amount: total * 100 // В копейках!
+                    }
+                ],
+                photo_url: "https://upload.wikimedia.org/wikipedia/sco/thumb/3/3a/Burger_King_Logo.svg/800px-Burger_King_Logo.svg.png",
+                photo_width: 300,
+                photo_height: 200,
+                suggested_tip_amounts: [1000, 2000, 3000], // 10, 20, 30 рублей в копейках
+                need_name: false,
+                need_phone_number: false,
+                need_email: false,
+                need_shipping_address: false,
+                is_flexible: false,
+                send_email_to_provider: false,
+                send_phone_number_to_provider: false
             };
 
-            // Показываем подтверждение
-            tg.showConfirm(
-                `Подтвердить заказ на ${total} ₽?`,
-                function(confirmed) {
-                    if (confirmed) {
-                        // Отправляем данные боту
-                        tg.sendData(JSON.stringify(orderData));
-
-                        // Показываем уведомление
-                        tg.showAlert("✅ Заказ отправлен! Ожидайте подтверждения.");
-
-                        // Очищаем корзину
-                        cart = [];
-                        total = 0;
-                        updateCart();
-
-                        // Закрываем Mini App через 2 секунды
-                        setTimeout(() => {
-                            tg.close();
-                        }, 2000);
+            // ОТКРЫВАЕМ ПЛАТЕЖНОЕ ОКНО
+            tg.openInvoice(invoice, function(status) {
+                console.log("Payment status:", status);
+                
+                if (status === "paid") {
+                    // УСПЕШНАЯ ОПЛАТА
+                    tg.showAlert("🎉 Оплата прошла успешно! Ваш заказ уже готовится.");
+                    
+                    // Собираем данные заказа
+                    const orderData = {
+                        status: "paid",
+                        order_id: orderId,
+                        user: tg.initDataUnsafe?.user,
+                        cart: cart,
+                        total: total,
+                        timestamp: new Date().toISOString()
+                    };
+                    
+                    // Отправляем данные боту
+                    tg.sendData(JSON.stringify(orderData));
+                    
+                    // Вибрация успеха
+                    if (tg.HapticFeedback) {
+                        tg.HapticFeedback.notificationOccurred('success');
                     }
+                    
+                    // Очищаем корзину
+                    cart = [];
+                    total = 0;
+                    updateCart();
+                    
+                    // Закрываем Mini App через 3 секунды
+                    setTimeout(() => {
+                        tg.close();
+                    }, 3000);
+                    
+                } else if (status === "failed") {
+                    tg.showAlert("❌ Оплата не прошла. Попробуйте еще раз или выберите другой способ оплаты.");
+                    if (tg.HapticFeedback) {
+                        tg.HapticFeedback.notificationOccurred('error');
+                    }
+                } else if (status === "cancelled") {
+                    tg.showAlert("⚠️ Оплата отменена. Вы можете продолжить покупки.");
+                } else if (status === "pending") {
+                    tg.showAlert("⏳ Платеж обрабатывается. Ожидайте подтверждения.");
                 }
-            );
+            });
         }
 
         // Показать информацию о пользователе
         function showUserInfo() {
             const user = tg.initDataUnsafe?.user;
             if (user) {
-                console.log("Пользователь:", user);
-
-                // Можно показать приветствие с именем
+                // Показываем приветствие с именем
+                const greeting = document.getElementById('greeting');
                 if (user.first_name) {
-                    document.querySelector('.header p').textContent =
-                        `Привет, ${user.first_name}! Закажи вкуснейшие бургеры!`;
+                    greeting.textContent = `Привет, ${user.first_name}! Закажи вкуснейшие бургеры!`;
                 }
+                
+                // Можно сохранить ID пользователя для аналитики
+                localStorage.setItem('tg_user_id', user.id);
             }
         }
 
@@ -273,12 +377,22 @@
                     tg.close();
                 }
             });
+
+            // Основная кнопка (внизу экрана)
+            tg.MainButton.setText("🛒 Открыть меню");
+            tg.MainButton.show();
+            tg.MainButton.onClick(() => {
+                document.getElementById('menu').scrollIntoView({ behavior: 'smooth' });
+            });
         });
 
         // Обработчик изменения темы
-        tg.onEvent('themeChanged', () => {
+        tg.onEvent('themeChanged', updateTheme);
+        
+        function updateTheme() {
             console.log("Тема изменена на:", tg.colorScheme);
-        });
+            document.body.style.backgroundColor = tg.themeParams.bg_color || '#ffffff';
+        }
     </script>
 </body>
 </html>
